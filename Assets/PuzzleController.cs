@@ -273,6 +273,15 @@ public class PuzzleController : MonoBehaviour
         if (validMoves.Count == 0)
         {
             Debug.Log("⚠️ Yapılacak hamle kalmadı veya oyun kilitlendi!");
+            if (menuController != null)
+            {
+                menuController.UpdateScoreUI(currentScore); // Son puanı yaz
+                menuController.ShowGameOverPanel(currentScore); // Paneli aç
+            }
+
+            StopAllCoroutines(); // AI oynuyorsa durdur
+            isAIPlaying = false;
+
             return;
         }
 

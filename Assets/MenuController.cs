@@ -20,6 +20,8 @@ public class MenuController : MonoBehaviour
     public Text txtScore;         // Puaný yazacaðýmýz Text (Bir sonraki görev için lazým olacak)
     public GameObject panelGameOver; // Oyun Bitti Paneli
     public Text txtFinalScore;       // Oyun sonu puan yazýsý
+    public GameObject txtNoMovesInfoObj;
+    public Text txtNoMoves;
 
     [Header("Setup Ekraný Referanslarý")]
     // 6 tane slotun içindeki sayý yazýlarý (Sýrasýyla 0-5)
@@ -192,8 +194,30 @@ public class MenuController : MonoBehaviour
         if (panelGameOver != null)
         {
             panelGameOver.SetActive(true);
-            if (txtFinalScore != null)
-                txtFinalScore.text =  finalScore.ToString();
+
+            // Eðer skor 124 ve üzeriyse (Kazandýysa veya hedefi geçtiyse)
+            if (txtFinalScore != null && finalScore >= 124)
+            {
+                txtFinalScore.text = finalScore.ToString();
+
+                txtNoMoves.text = "TEBRÝKLER TAM PUAN";
+                // Kazanýrsa "Hamle Kalmadý" yazýsý görünmesin, garanti olsun diye kapatýyoruz.
+                if (txtNoMovesInfoObj != null) txtNoMovesInfoObj.SetActive(true);
+            }
+            else
+            {
+                // --- YENÝ EKLENEN KISIM 2 (ELSE BLOÐU) ---
+
+                // 1. Skoru yazdýr
+                if (txtFinalScore != null)
+                    txtFinalScore.text = finalScore.ToString();
+
+                txtNoMoves.text = "OYUNDA YAPILABÝLECEK HAMLE KALMADI";
+                // 2. "Hamle Kalmadý" yazýsýný AKTÝF et
+                if (txtNoMovesInfoObj != null)
+                    txtNoMovesInfoObj.SetActive(true);
+                   
+            }
         }
     }
 

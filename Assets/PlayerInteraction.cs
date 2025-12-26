@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.UI; // Text için gerekli
+using UnityEngine.UI;
 using System.Collections.Generic;
 
 public class PlayerInteraction : MonoBehaviour
@@ -9,17 +9,18 @@ public class PlayerInteraction : MonoBehaviour
     public GridManager gridManager;
     public Camera mainCamera;
 
-    [Header("UI Referanslarý")] // --- EKLENEN KISIM 1 ---
-    public Text[] handCountTexts; // O butonlarýn altýndaki sayý textlerini buraya atacaðýz
+    [Header("UI Referanslarý")]
+    public Text[] handCountTexts;
 
     [Header("Ayarlar")]
     public float ghostAlpha = 0.5f;
+    public float dragOffsetY = 1.0f; // EKLENDÝ: Þekil parmaðýn ne kadar yukarýsýnda görünsün?
 
     private GameObject currentGhost;
     private int selectedShapeId = -1;
     private bool isDragging = false;
 
-    // Þekil listesi (Ayný kalacak)
+    // Þekil listesi
     private readonly List<Vector2Int[]> shapes = new List<Vector2Int[]>
     {
         new Vector2Int[] { new Vector2Int(0,0), new Vector2Int(1,0), new Vector2Int(2,0) },
@@ -32,34 +33,32 @@ public class PlayerInteraction : MonoBehaviour
 
     void Update()
     {
-        // --- EKLENEN KISIM 2: SÜREKLÝ GÜNCELLEME ---
-        // Oyun baþladýðýnda envanter deðiþtiyse UI da anýnda deðiþsin.
         UpdateHandUI();
 
         if (GameSettings.CurrentMode == GameMode.AI_Manual || GameSettings.CurrentMode == GameMode.AI_Auto)
             return;
 
-        if (GameSettings.CurrentMode == GameMode.AI_Manual || GameSettings.CurrentMode == GameMode.AI_Auto)
-            return;
-
+        // Sadece sürükleme modu aktifse iþlem yap
         if (isDragging && currentGhost != null)
         {
-            HandleDragging();
+            // --- DEÐÝÞÝKLÝK BURADA BAÞLIYOR ---
 
-            if (Input.GetMouseButtonDown(0))
+            // 1. Durum: Parmaðýn ekranda basýlý olduðu sürece (veya Mouse basýlýyken)
+            if (Input.GetMouseButton(0))
+            {
+                HandleDragging();
+            }
+
+            // 2. Durum: Parmaðýný kaldýrdýðýn an (veya Mouse'u býraktýðýn an)
+            if (Input.GetMouseButtonUp(0))
             {
                 TryPlaceShape();
-            }
-            else if (Input.GetMouseButtonDown(1))
-            {
-                CancelDrag();
             }
         }
     }
 
     public void SelectShapeToDrag(int shapeId)
     {
-        // Envanter kontrolü
         if (puzzleController.currentInventory[shapeId] <= 0)
         {
             Debug.Log("Bu parçadan kalmadý!");
@@ -71,6 +70,9 @@ public class PlayerInteraction : MonoBehaviour
 
         if (currentGhost != null) Destroy(currentGhost);
         CreateGhost(shapeId);
+
+        // Þekil seçildiði an parmaðýn pozisyonuna gelsin diye bir kez manuel çaðýrýyoruz
+        HandleDragging();
     }
 
     void CreateGhost(int shapeId)
@@ -80,10 +82,9 @@ public class PlayerInteraction : MonoBehaviour
         {
             GameObject cell = Instantiate(gridManager.cellPrefab, currentGhost.transform);
 
-            // Pozisyon
+            // Hücre yerleþimi
             cell.transform.localPosition = new Vector3(pos.y * gridManager.targetSize, -pos.x * gridManager.targetSize, 0);
 
-            // SCALE AYARI (Senin düzelttiðin kýsým)
             SpriteRenderer sr = cell.GetComponent<SpriteRenderer>();
             if (sr != null)
             {
@@ -95,7 +96,7 @@ public class PlayerInteraction : MonoBehaviour
                 Color c = gridManager.shapeColors[shapeId];
                 c.a = ghostAlpha;
                 sr.color = c;
-                sr.sortingOrder = 10;
+                sr.sortingOrder = 100; // Mobilde parmak altýnda kalmasýn diye sayýyý yükselttim
             }
         }
     }
@@ -105,12 +106,19 @@ public class PlayerInteraction : MonoBehaviour
         Vector3 mousePos = mainCamera.ScreenToWorldPoint(Input.mousePosition);
         mousePos.z = 0;
 
+        // --- GÖRÜÞ AÇISI DÜZELTMESÝ (OFFSET) ---
+        // Mobilde parmak þekli kapattýðý için þekli biraz yukarý kaydýrýyoruz.
+        // Bilgisayarda test ederken mouse'un biraz yukarýsýnda kalabilir, normaldir.
+        mousePos.y += dragOffsetY;
+
         float cellSize = gridManager.targetSize;
         Vector3 gridOrigin = gridManager.transform.position;
 
+        // Grid üzerindeki satýr/sütun hesabý
         int col = Mathf.RoundToInt((mousePos.x - gridOrigin.x) / cellSize);
         int row = Mathf.RoundToInt(-(mousePos.y - gridOrigin.y) / cellSize);
 
+        // Snap (Yapýþma) pozisyonu
         Vector3 snapPos = new Vector3(
             gridOrigin.x + (col * cellSize),
             gridOrigin.y - (row * cellSize),
@@ -125,32 +133,31 @@ public class PlayerInteraction : MonoBehaviour
 
     void TryPlaceShape()
     {
+        // Dragging (Sürükleme) iþleminde hesapladýðýmýz son konumu kullanýyoruz
+        // Tekrar mouse pozisyonu almaya gerek yok çünkü parmak kalktý.
+        // Ghost'un þu an durduðu yer referans alýnacak.
+
         float cellSize = gridManager.targetSize;
         Vector3 gridOrigin = gridManager.transform.position;
-        Vector3 mousePos = mainCamera.ScreenToWorldPoint(Input.mousePosition);
+        Vector3 ghostPos = currentGhost.transform.position;
 
-        int col = Mathf.RoundToInt((mousePos.x - gridOrigin.x) / cellSize);
-        int row = Mathf.RoundToInt(-(mousePos.y - gridOrigin.y) / cellSize);
+        int col = Mathf.RoundToInt((ghostPos.x - gridOrigin.x) / cellSize);
+        int row = Mathf.RoundToInt(-(ghostPos.y - gridOrigin.y) / cellSize);
 
         if (IsValidPlacement(selectedShapeId, row, col))
         {
             PlaceShapeLogic(selectedShapeId, row, col);
-
-            // Envanterden düþ
             puzzleController.currentInventory[selectedShapeId]--;
-
-            // --- EKLENEN KISIM 3: UI GÜNCELLE ---
             UpdateHandUI();
-
-            CancelDrag();
+            CancelDrag(); // Ýþlem baþarýlý, sürüklemeyi bitir
         }
         else
         {
-            Debug.Log("Geçersiz Hamle!");
+            // Eðer yanlýþ yere býrakýrsa sadece iptal et (Þekil yerine geri dönsün)
+            CancelDrag();
         }
     }
 
-    // --- YENÝ FONKSÝYON: UI TEXTLERÝNÝ GÜNCELLE ---
     public void UpdateHandUI()
     {
         if (handCountTexts == null || puzzleController == null) return;
@@ -159,7 +166,6 @@ public class PlayerInteraction : MonoBehaviour
         {
             if (i < handCountTexts.Length && handCountTexts[i] != null)
             {
-                // PuzzleController'daki gerçek sayýyý alýp text'e yazýyoruz
                 handCountTexts[i].text = puzzleController.currentInventory[i].ToString();
             }
         }
@@ -203,15 +209,12 @@ public class PlayerInteraction : MonoBehaviour
 
     void PlaceShapeLogic(int shapeId, int startRow, int startCol)
     {
-        // 1. Görseli ve GridManager'ý güncelle (Eski kodun burasýydý)
-        int[,] grid = GetCurrentGrid(); // Reflection ile çekmiþtik
+        int[,] grid = GetCurrentGrid();
         foreach (Vector2Int p in shapes[shapeId])
         {
             grid[startRow + p.x, startCol + p.y] = shapeId + 1;
         }
         gridManager.UpdateVisuals(grid);
-
-        // 2. YENÝ KISIM: PuzzleController'a "Ben burayý doldurdum" de.
         puzzleController.RegisterPlayerMove(shapeId, startRow, startCol);
     }
 }
